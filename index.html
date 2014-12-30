@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="js/d3.min.js" charset="utf-8"></script>
+</head>
+
+<body>
+<center>
+<div class="chart" id="bubbleChart">
+  <!--svg id="svgChart" width="1000" height="500" style="border:1px solid Red;"></svg-->
+</div>
+</center>
+<!--<div>
+  <form>
+    Title: <input type="text" name="title" size="100" id="ftitle" readonly><br>
+    Value: <input type="text" name="value" size = "20" id="fvalue" readonly><br>
+    Risk: <input type="text" name="risk" size = "20" id="frisk" readonly><br>
+    Size: <input type="text" name="size" size = "20" id="fsize" readonly><br>
+  </form>
+</div> -->
+<div>
+<center>
+ <!-- <table id="demandTable">
+    <tr>
+      <th>Demand</th>
+      <th>Risk</th>
+      <th>Value</th>
+      <th>Size</th>
+    </tr>
+  </table> -->
+</center>
+</div>
+<style>
+  .chart svg{
+    border:1px solid Red;
+  }
+
+  .axis line{
+    shape-rendering: crispEdges;
+    stroke: #000;
+  }
+
+  .axis .minor line{
+    stroke: #777;
+    stroke-dasharray: 2,2;
+  }
+
+  .axis path {
+    display: none;
+  }
+
+  .bubble {
+
+  }
+
+  .dragging circle{
+ /*   fill: Red;
+    stroke: Red;*/
+  }
+
+  table {
+    border:1px solid black;
+    width: 800px;
+  }
+
+  th,td
+  {
+    border:1px solid black;
+    width: 200px;
+  }
+
+  .approve {
+    /*cursor: pointer;*/
+    cursor:url("img/approve-check.png") 16 35,auto;
+  }
+
+  .approved {
+    fill: Green;
+    stroke: Green;
+    stroke-width: 4;
+    fill-opacity: 0.4;
+    stroke-opacity: 0.9; 
+  }
+
+  .move {
+    cursor:move;
+  }
+
+  .delete {
+    cursor:url("img/delete.png") 15 15,auto;
+  }
+
+  .sizeButton {
+      position:relative;
+      fill: white;
+      stroke: black;
+  }
+
+  .sizeButtons {
+    cursor: default;
+  }
+
+  .controlPanel {
+    fill:steelblue;
+    stroke:black;
+    stroke-width:5;
+    opacity:0.5;
+  }
+
+</style>
+<script>
+	var data = [{
+  "risk": 1.5,
+  "value": 6,
+  "size": 3,
+  "color": "grey",
+  "title": "Annual Bonus Review"
+}, {
+  "risk": 4,
+  "value": 7,
+  "size": 3,
+  "color": "grey",
+  "title": "Data Center Migration"
+}, {
+  "risk": 6,
+  "value": 3,
+  "size": 5,
+  "color": "green",
+  "title": "Fuji Release Planning"
+}, {
+  "risk": 2,
+  "value": 2,
+  "size": 7,
+  "color": "grey",
+  "title": "ERP Replacement"
+}, {
+  "risk": 5,
+  "value": 1,
+  "size": 2,
+  "color": "grey",
+  "title": "Legal Case Management"
+}, {
+  "risk": 7.5,
+  "value": 0.5,
+  "size": 1,
+  "color": "grey",
+  "title": "Web Quote"
+},
+{
+  "risk": 3.5,
+  "value": 7.5,
+  "size": 5,
+  "color": "grey",
+  "title": "CRM Upgrade"
+},
+{
+  "risk": 8,
+  "value": 9,
+  "size": 6,
+  "color": "grey",
+  "title": "Legal Case Management"
+},
+{
+  "risk": 7,
+  "value": 5.5,
+  "size": 3,
+  "color": "grey",
+  "title": "Singapore Office Build"
+},
+{
+  "risk": 3.5,
+  "value": 3.5,
+  "size": 5,
+  "color": "green",
+  "title": "India Office Build"
+}];
+
+  var dmnRow = d3.select("#demandTable").selectAll("tr")
+                  .data(data)
+                  .enter()
+                  .append("tr")
+                  .attr("id",function(d){return (d.title).split(' ').join('');});
+
+  dmnRow.append("td")
+    .text(function(d){return d.title;})
+    .attr("class","title");
+  dmnRow.append("td")
+    .text(function(d){return d.risk;})
+    .attr("class","risk");
+  dmnRow.append("td")
+    .text(function(d){return d.value;})
+    .attr("class","value");
+  dmnRow.append("td")
+    .text(function(d){return d.size;})
+    .attr("class","size");
+
+  
+  var riskScale = {min: 0, max: 10};
+  var valueScale = {min: 0, max: 10};
+  var sizeScale = {min: 0, max: 10};
+  var margin = {top: 50, bottom: 50, left: 75, right: 75};
+  var chartWidth = 1000 - margin.left - margin.right;
+  var chartHeight = 500 - margin.top - margin.bottom;
+  var chartSvg = d3.select("#bubbleChart").append("svg")
+      .attr("width",chartWidth + margin.left + margin.right)
+      .attr("height",chartHeight + margin.top + margin.bottom)
+      .attr("class","chart");
+
+  var xRange = d3.scale.linear().range([margin.left,margin.left+chartWidth]).domain([riskScale.min,riskScale.max]);
+  var yRange = d3.scale.linear().range([margin.top+chartHeight,margin.top]).domain([valueScale.min,valueScale.max]);
+
+  var xInvRange = d3.scale.linear().range([riskScale.min,riskScale.max]).domain([margin.left,margin.left+chartWidth]);
+  var yInvRange = d3.scale.linear().range([valueScale.min,valueScale.max]).domain([margin.top+chartHeight,margin.top]);
+
+  var xAxis1 = d3.svg.axis()
+      .scale(xRange)
+      .orient("bottom")
+      .tickSize(-chartHeight);  
+  var yAxis1 = d3.svg.axis()
+      .scale(yRange)
+      .orient("left")
+      .tickSize(-chartWidth);
+  var xAxis2 = d3.svg.axis()
+      .scale(xRange)
+      .orient("top");  
+  var yAxis2 = d3.svg.axis()
+      .scale(yRange)
+      .orient("right");
+  
+  var gx1 = chartSvg.append("g")
+      .call(xAxis1)
+      .attr("class","x axis")
+      .attr("transform", "translate(0,"+(margin.top + chartHeight)+")");
+
+  gx1.append("text")
+    .style("text-anchor", "middle")
+    .text("Risk")
+    .attr("x",margin.left+chartWidth/2)
+    .attr("y",30);
+
+  var gx2 = chartSvg.append("g")
+      .call(xAxis2)
+      .attr("class","x axis")
+      .attr("transform", "translate(0,"+margin.top+")");
+
+  gx2.append("text")
+    .style("text-anchor", "middle")
+    .text("Risk")
+    .attr("x",margin.left+chartWidth/2)
+    .attr("y",-30);
+
+  var gy1 = chartSvg.append("g")
+      .call(yAxis1)
+      .attr("class","y axis")
+      .attr("transform", "translate("+margin.left+",0)");
+
+  gy1.append("text")
+    .style("text-anchor", "middle")
+    .text("Value")
+    .attr("x",-20)
+    .attr("y",margin.top+chartHeight/2)
+    .attr("transform","rotate(270,-20,"+(margin.top+chartHeight/2)+")");
+
+  var gy2 = chartSvg.append("g")
+      .call(yAxis2)
+      .attr("class","y axis")
+      .attr("transform", "translate("+(margin.left+chartWidth)+",0)");
+
+  gy2.append("text")
+    .style("text-anchor", "middle")
+    .text("Value")
+    .attr("x",20)
+    .attr("y",margin.top+chartHeight/2)
+    .attr("transform","rotate(90,20,"+(margin.top+chartHeight/2)+")");
+
+
+  gx1.selectAll("g").filter(function(d) { 
+                              if(d != (riskScale.max - riskScale.min)/2 && d != riskScale.max)
+                                {return d;} })
+    .classed("minor", true);
+
+  gx2.selectAll("g").filter(function(d) { 
+                              if(d != (riskScale.max - riskScale.min)/2 && d != riskScale.max)
+                                {return d;} })
+    .classed("minor", true); 
+
+  gy1.selectAll("g").filter(function(d) { 
+                              if(d != (valueScale.max - valueScale.min)/2 && d != valueScale.max)
+                                {return d;} })
+    .classed("minor", true);
+
+  gy2.selectAll("g").filter(function(d) { 
+                              if(d != (valueScale.max - valueScale.min)/2 && d != valueScale.max)
+                                {return d;} })
+    .classed("minor", true); 
+
+    var parentpanel = chartSvg.append("g")
+      .attr("transform","translate("+(margin.left+chartWidth+margin.right-250)+",0)")
+      .on("mouseover",function(d){panel.transition().duration(900)
+                                .attr("transform","translate(0,0)");})
+      .on("mouseout",function(d){panel.transition().duration(900)
+                                .attr("transform","translate(0,-40)");});
+
+
+    var panel = parentpanel.append("g")
+      .attr("transform","translate(0,-40)");
+
+    panel.append("rect")
+      .attr("width",220)
+      .attr("height",50)
+      .attr("rx",20)
+      .attr("ry",20)
+      .attr("class","controlPanel");
+
+     panel.append("image")
+      .attr("id","approve")
+      .attr("xlink:href","approve.svg")
+      .attr("x",10)
+      .attr("y",5)
+      .attr("width", 35)
+      .attr("height",35)
+      .on("click", function(d){
+        chartSvg.classed("move",false)
+                .classed("delete",false);
+
+        if (chartSvg.classed("approve")== false) {
+          chartSvg.classed("approve",true);
+        }
+        else {
+          chartSvg.classed("approve",false);
+        }
+      });
+
+     panel.append("image")
+      .attr("id","move")
+      .attr("xlink:href","img/move.png")
+      .attr("x",60)
+      .attr("y",0)
+      .attr("width", 45)
+      .attr("height",45)
+      .on("click", function(d){
+        chartSvg.classed("approve",false)
+                .classed("delete",false);
+
+        if (chartSvg.classed("move") == false) {
+          chartSvg.classed("move",true);
+        }
+        else {
+          chartSvg.classed("move",false);
+        }
+      });
+
+     panel.append("image")
+      .attr("id","rbin")
+      .attr("xlink:href","img/trash.png")
+      .attr("x",120)
+      .attr("y",5)
+      .attr("width", 35)
+      .attr("height",35)
+      .on("click", function(d){
+        chartSvg.classed("approve",false)
+                .classed("move",false);
+
+        if (chartSvg.classed("delete") == false) {
+          chartSvg.classed("delete",true);
+        }
+        else {
+          chartSvg.classed("delete",false);
+        }
+      });
+
+      panel.append("image")
+      .attr("id","pointer")
+      .attr("xlink:href","img/pointer.png")
+      .attr("x",170)
+      .attr("y",0)
+      .attr("width", 40)
+      .attr("height",45)
+      .on("click", function(d){
+        chartSvg.classed("approve",false)
+                .classed("move",false)
+                .classed("delete",false);
+      });
+
+
+    var drag = d3.behavior.drag()
+    .origin(function(d) { return d; })
+    .on("dragstart", dragstarted)
+    .on("drag", dragged)
+    .on("dragend", dragended);
+
+  var bubbles = chartSvg.selectAll("g.bubble").data(data);
+  bubbles.enter()
+    .append("g")
+    .call(drag)
+    .attr("transform",function(d){return "translate("+xRange(d.risk)+","+yRange(d.value)+")";})
+    .attr("class","bubble")
+    .on("mouseover",bubMouseOver)
+    .on("mouseout", bubMouseOut);
+
+    bubbles.append("circle")
+      .attr("r",function(d){return (d.size/sizeScale.max)*(chartHeight/valueScale.max);})
+      .style({"fill": function(d){return d.color;},
+              "stroke": function(d){return d.color;},
+              "stroke-width": 4,
+              "fill-opacity": 0.4,
+              "stroke-opacity": 0.9 
+
+            })
+      .on("click",function(d){
+       // alert("#"+(d.title).split(' ').join(''));
+   /* d3.select("#ftitle")
+      .attr("value",d.title);
+    d3.select("#frisk")
+      .attr("value",d.risk);
+    d3.select("#fvalue")
+      .attr("value",d.value);
+    d3.select("#fsize")
+      .attr("value",d.size); */
+    d3.selectAll("td")
+      .attr("bgcolor","#FFFFFF");
+    d3.select("#"+(d.title).split(' ').join('')).selectAll("td")
+      .attr("bgcolor","#F4FA58"); 
+
+    if (chartSvg.classed("approve") == true)
+      {
+        var r = confirm("Do you want to approve this demand?");
+        if (r == true) {
+          d3.select(this).attr("style",null);
+          d3.select(this).classed("approved",true);
+        }
+      }
+    if (chartSvg.classed("delete") == true)
+    {
+      var r = confirm("Are you sure you want to delete?");
+        if (r == true) {
+          d3.select(this.parentNode).remove();
+          d3.select("#"+(d.title).split(' ').join('')).remove();
+        }
+    } });
+
+
+    bubbles.append("text")
+      .text(function(d){return d.title;})
+      .attr("font-family", "sans-serif")
+      .attr("font-size", "10px");
+
+    var sizeButtons = bubbles.append("g")
+              .attr("transform",function(d){return "translate("+(d.size/sizeScale.max)*(chartHeight/valueScale.max)+","+"0)";})
+              .style("opacity",0)
+              .attr("class","sizeButtons");
+
+    var sizeIncButton = sizeButtons.append("g")
+              .attr("transform","translate(0,-20)")
+              .on("click",increaseSize);
+
+    sizeIncButton.append("rect")
+      .attr("class","sizeButton")
+      .attr("height",20)
+      .attr("width",20);
+
+    sizeIncButton.append("text")
+          .text("+").attr("font-family", "sans-serif")
+          .attr("font-size", "15px")
+          .attr("x",5)
+          .attr("y",15);
+
+
+    var sizeDecButton = sizeButtons.append("g")
+              .on("click",decreaseSize);
+
+    sizeDecButton.append("rect")
+      .attr("class","sizeButton")
+      .attr("height",20)
+      .attr("width",20);
+
+    sizeDecButton.append("text")
+      .text("-").attr("font-family", "sans-serif")
+      .attr("font-size", "20px")
+      .attr("x",5)
+      .attr("y",15);
+
+
+    function dragstarted(d) {
+      if(chartSvg.classed("move") == true) {
+        d3.event.sourceEvent.stopPropagation();
+        d3.select(this).classed("dragging", true);
+      }
+    }
+
+    function dragged(d) {
+      if(chartSvg.classed("move") == true) {
+        d.risk = xInvRange(xRange(d.risk) + d3.event.dx);
+        d.value = yInvRange(yRange(d.value) + d3.event.dy);
+        d3.select(this).attr("transform",function(d){return "translate("+xRange(d.risk)+","+yRange(d.value)+")";});
+        var row = d3.select("#"+(d.title).split(' ').join(''));
+        row.select(".risk")
+          .text(d.risk);
+        row.select(".value")
+          .text(d.value);
+        row.select(".size")
+          .text(d.size);
+      }
+
+    }
+
+    function dragended(d) {
+      if(chartSvg.classed("move") == true)
+      {
+        d3.select(this).classed("dragging", false);
+       /* var pos = d3.transform(d3.select(this).attr("transform")).translate;
+        var x = pos[0];
+        var y = pos[1];
+        var bin = {};
+        bin.x = chartSvg.select("#rbin").attr("x");
+        bin.y = chartSvg.select("#rbin").attr("y");
+        bin.width = chartSvg.select("#rbin").attr("width");
+        bin.height = chartSvg.select("#rbin").attr("height");
+
+        //alert(pos[0]+"  "+pos[1]+"  "+bin.x+"  "+bin.y);
+
+        if (x>bin.x && x<bin.x+bin.width && y>bin.y && y<bin.y+bin.height)
+        {
+          var r = confirm("Are you sure you want to delete?");
+          if (r == true) {
+            d3.select(this).remove();
+            d3.select("#"+(d.title).split(' ').join('')).remove();
+          }
+        }*/
+      }
+    }
+
+    function bubMouseOver(d,i) {
+      if(chartSvg.classed("move") == true) {
+        (d3.select(this).select(".sizeButtons")).transition()
+            .duration(500)
+            .style("opacity", 1);
+      }
+    }
+
+    function bubMouseOut(d,i) {
+      if(chartSvg.classed("move") == true) {
+        (d3.select(this).select(".sizeButtons")).transition()
+              .duration(500)
+              .style("opacity", 0);
+      }
+    }
+
+    function increaseSize(d) {
+      if (d.size <10){
+        d.size = d.size + 1;
+      } else {
+        alert("Maximum limit of attribute 'Size'(10) has reached");
+      }
+      var newRadius = ((d.size)/sizeScale.max)*(chartHeight/valueScale.max);
+      d3.select(this.parentNode.parentNode).select("circle")
+          .attr("r",newRadius);
+      var row = d3.select("#"+(d.title).split(' ').join(''));
+      row.select(".size")
+        .text(d.size);
+    }
+
+    function decreaseSize(d) {
+     if (d.size >0){
+        d.size = d.size - 1;
+      } else {
+        alert("Minimum limit of attribute 'Size'(0) has reached");
+      }
+      var newRadius = ((d.size)/sizeScale.max)*(chartHeight/valueScale.max);
+      d3.select(this.parentNode.parentNode).select("circle")
+          .attr("r",newRadius);
+      var row = d3.select("#"+(d.title).split(' ').join(''));
+      row.select(".size")
+        .text(d.size);
+    }
+
+    
+</script>
+</body>
+</html>
